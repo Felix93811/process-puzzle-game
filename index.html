@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流程图排序游戏</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+        }
+
+        #settings,
+        #game {
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            margin: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #game {
+            display: block;
+        }
+
+        #process-input-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #process-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .process {
+            width: 120px;
+            min-height: 60px;
+            background-color: #e0f7fa;
+            border: 2px solid #26c6da;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: move;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
+            color: #263238;
+            transition: all 0.2s ease;
+            padding: 5px;
+            word-wrap: break-word;
+            text-align: center;
+        }
+
+        .process:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #game-area {
+            width: 100%;
+            min-height: 200px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            border-radius: 8px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button {
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.1s ease;
+        }
+
+        button:active {
+            transform: scale(0.95);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+
+        input {
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            margin-left: 10px;
+        }
+
+        #return-settings-btn,
+        #reset-processes-btn {
+            margin-bottom: 20px;
+        }
+
+        .arrow {
+            font-size: 24px;
+            color: #26c6da;
+        }
+
+        #game-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #current-time {
+            font-size: 18px;
+            color: #263238;
+        }
+
+        /* 错误提示弹窗样式 */
+        #error-popup {
+            display: none;
+            position: fixed;
+            top: 10%;
+            /* 调整位置，使其不那么靠上 */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ffcccc;
+            color: red;
+            padding: 25px 30px;
+            /* 增大内边距，使弹窗更大 */
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            pointer-events: none;
+            font-size: 24px;
+            /* 增大字体大小 */
+        }
+
+        /* 手机端响应式设计 */
+        @media (max-width: 768px) {
+            .process {
+                width: 80px;
+                font-size: 12px;
+            }
+
+            #game-area {
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 设置界面 -->
+    <div id="settings">
+        <h2>设置界面</h2>
+        <input type="text" id="game-name" placeholder="游戏名称" value="请配置出保证金操作的正确顺序">
+        <input type="text" id="player-name" placeholder="玩家姓名" value="默认玩家">
+        <div id="process-input-container">
+            <button id="add-process-btn">添加流程</button>
+        </div>
+        <div id="relationship-input-container">
+            <!-- 上下游关系输入容器 -->
+        </div>
+        <button id="save-settings-btn">保存设置</button>
+        <button id="start-game-btn">开始游戏</button>
+    </div>
+    <!-- 游戏界面 -->
+    <div id="game">
+        <div id="game-title">
+            <h2></h2>
+            <span id="current-time">本次耗时: 0 秒</span>
+        </div>
+        <button id="return-settings-btn">返回设置</button>
+        <button id="reset-processes-btn">重置流程</button>
+        <div id="process-container"></div>
+        <div id="game-area"></div>
+        <div id="error-popup">顺序错误，请重新放置！</div>
+    </div>
+    <script>
+        let processes = [];
+        let relations = {};
+        let order = [];
+        let start;
+        let ranks = [];
+        let errorTimer;
+        let timerInterval;
+
+        const defaultProcesses = [
+            "与客户签订合同",
+            "制作销售订单，并在单据中录入保证金",
+            "通过销售订单下推保证金收款单",
+            "债务人履行完合同约定",
+            "保证金的收款单下推预收款收款单",
+            "手动将把保证金抵做价款的预收单与应收单核销"
+        ];
+
+        const loadSettings = () => {
+            // 忽略本地存储，始终使用默认设置
+            processes = defaultProcesses;
+            relations = {};
+            for (let i = 0; i < processes.length - 1; i++) {
+                relations[processes[i]] = [processes[i + 1]];
+            }
+
+            const processInputContainer = document.getElementById('process-input-container');
+            // 保存添加流程按钮
+            const addProcessButton = document.getElementById('add-process-btn');
+            // 清空容器内容，但保留添加流程按钮
+            processInputContainer.innerHTML = '';
+            processInputContainer.appendChild(addProcessButton);
+
+            processes.forEach((processName, index) => {
+                const input = document.createElement('input');
+                input.value = processName;
+                input.addEventListener('input', updateRelationshipInputs);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '删除';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.addEventListener('click', () => deleteProcess(input));
+
+                const wrapper = document.createElement('div');
+                wrapper.appendChild(input);
+                wrapper.appendChild(deleteBtn);
+
+                processInputContainer.appendChild(wrapper);
+            });
+
+            updateRelationshipInputs();
+        };
+
+        const addProcess = () => {
+            const input = document.createElement('input');
+            const processIndex = processes.length + 1;
+            input.value = `流程${processIndex}`;
+            input.addEventListener('input', updateRelationshipInputs);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '删除';
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.addEventListener('click', () => deleteProcess(input));
+
+            const wrapper = document.createElement('div');
+            wrapper.appendChild(input);
+            wrapper.appendChild(deleteBtn);
+
+            document.getElementById('process-input-container').appendChild(wrapper);
+            processes.push(input.value);
+
+            // 更新上下游关系输入框
+            updateRelationshipInputs();
+        };
+
+        const deleteProcess = (input) => {
+            const wrapper = input.parentNode;
+            wrapper.remove();
+            const index = processes.indexOf(input.value);
+            if (index > -1) {
+                processes.splice(index, 1);
+            }
+            updateRelationshipInputs();
+        };
+
+        const updateRelationshipInputs = () => {
+            const relationshipContainer = document.getElementById('relationship-input-container');
+            relationshipContainer.innerHTML = '';
+
+            const processInputs = document.querySelectorAll('#process-input-container input');
+            processInputs.forEach((input, index) => {
+                const inputElement = document.createElement('input');
+                inputElement.value = input.value;
+                relationshipContainer.appendChild(inputElement);
+                if (index < processInputs.length - 1) {
+                    const arrow = document.createTextNode(' 到 ');
+                    relationshipContainer.appendChild(arrow);
+                }
+            });
+        };
+
+        const saveSettings = () => {
+            const relationshipInputs = document.querySelectorAll('#relationship-input-container input');
+            relations = {};
+            for (let i = 0; i < relationshipInputs.length - 1; i++) {
+                const up = relationshipInputs[i].value.trim();
+                const down = relationshipInputs[i + 1].value.trim();
+                if (up && down) {
+                    relations[up] = [down];
+                }
+            }
+            localStorage.setItem('gameSettings', JSON.stringify({
+                gameName: document.getElementById('game-name').value,
+                playerName: document.getElementById('player-name').value,
+                processes: Array.from(document.querySelectorAll('#process-input-container input')).map(input => input.value),
+                relations
+            }));
+            alert('设置已保存');
+        };
+
+        const shuffleArray = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        };
+
+        const startGame = () => {
+            const processInputs = document.querySelectorAll('#process-input-container input');
+            processes = Array.from(processInputs).map(input => input.value);
+            if (!processes.length) return alert('请添加流程');
+            const gameName = document.getElementById('game-name').value;
+            document.getElementById('game-title').querySelector('h2').textContent = gameName;
+            document.getElementById('settings').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            const container = document.getElementById('process-container');
+            container.innerHTML = '';
+            const gameArea = document.getElementById('game-area');
+            gameArea.innerHTML = '';
+
+            // 打乱流程顺序
+            const shuffledProcesses = shuffleArray([...processes]);
+
+            shuffledProcesses.forEach(name => {
+                const process = document.createElement('div');
+                process.className = 'process';
+                process.textContent = name;
+                process.draggable = true;
+                process.ondragstart = (e) => e.dataTransfer.setData('text', e.target.textContent);
+                container.appendChild(process);
+            });
+            order = [];
+
+            // 启动计时器
+            start = Date.now();
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - start) / 1000);
+                document.getElementById('current-time').textContent = `本次耗时: ${elapsed} 秒`;
+            }, 1000);
+        };
+
+        const drop = (e) => {
+            e.preventDefault();
+            const data = e.dataTransfer.getData('text');
+            const gameArea = document.getElementById('game-area');
+            const container = document.getElementById('process-container');
+            let isValid = true;
+
+            if (order.length === 0) {
+                const allDown = Object.values(relations).flat();
+                const validStarts = processes.filter(p => !allDown.includes(p));
+                if (!validStarts.includes(data)) {
+                    isValid = false;
+                }
+            } else {
+                const last = order[order.length - 1];
+                const validNext = relations[last] || [];
+                if (!validNext.includes(data)) {
+                    isValid = false;
+                }
+            }
+
+            if (!isValid) {
+                showError();
+                const existingProcess = Array.from(container.children).find(p => p.textContent === data);
+                if (!existingProcess) {
+                    const newProcess = document.createElement('div');
+                    newProcess.className = 'process';
+                    newProcess.textContent = data;
+                    newProcess.draggable = true;
+                    newProcess.ondragstart = (e) => e.dataTransfer.setData('text', e.target.textContent);
+                    container.appendChild(newProcess);
+                }
+                return;
+            }
+
+            // 放入正确流程时，隐藏错误提示
+            hideError();
+
+            const process = document.createElement('div');
+            process.className = 'process';
+            process.textContent = data;
+            if (order.length > 0) {
+                const arrow = document.createElement('span');
+                arrow.className = 'arrow';
+                arrow.textContent = '→';
+                gameArea.appendChild(arrow);
+            }
+            gameArea.appendChild(process);
+            order.push(data);
+            container.querySelectorAll('.process').forEach(p => {
+                if (p.textContent === data) p.remove();
+            });
+
+            if (order.length === processes.length) {
+                // 完成游戏时停止计时
+                clearInterval(timerInterval);
+            }
+        };
+
+        const showError = () => {
+            const errorPopup = document.getElementById('error-popup');
+            errorPopup.style.display = 'block';
+            // 清除之前的定时器
+            clearTimeout(errorTimer);
+            // 设置新的定时器，缩短提示时间
+            errorTimer = setTimeout(() => errorPopup.style.display = 'none', 1000);
+        };
+
+        const hideError = () => {
+            const errorPopup = document.getElementById('error-popup');
+            errorPopup.style.display = 'none';
+        };
+
+        // 初始化设置
+        loadSettings();
+        startGame();
+
+        // 添加事件监听器
+        document.getElementById('add-process-btn').addEventListener('click', addProcess);
+        document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+        document.getElementById('start-game-btn').addEventListener('click', startGame);
+        document.getElementById('game-area').addEventListener('dragover', (e) => e.preventDefault());
+        document.getElementById('game-area').addEventListener('drop', drop);
+        document.getElementById('return-settings-btn').addEventListener('click', () => {
+            document.getElementById('settings').style.display = 'block';
+            document.getElementById('game').style.display = 'none';
+            clearInterval(timerInterval);
+            document.getElementById('current-time').textContent = '本次耗时: 0 秒';
+        });
+        document.getElementById('reset-processes-btn').addEventListener('click', () => {
+            startGame();
+            // 重置计时显示
+            document.getElementById('current-time').textContent = '本次耗时: 0 秒';
+        });
+    </script>
+</body>
+
+</html>    
